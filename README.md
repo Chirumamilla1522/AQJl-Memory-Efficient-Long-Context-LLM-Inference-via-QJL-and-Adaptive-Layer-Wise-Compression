@@ -1,9 +1,17 @@
-# QJL
-[1-Bit Quantized JL Transform for KV Cache Quantization with Zero Overhead](https://arxiv.org/pdf/2406.03482) 
+# Memory-Efficient Long-Context LLM Inference via QJL and Adaptive Layer-Wise Compression
 
+**Project:** A-QJL — Layer-group adaptive KV-cache compression extending [QJL (Zandieh et al., 2024)](https://arxiv.org/pdf/2406.03482).
+
+**Authors:** Bhargav Chirumamilla, Xinkai Shen
+
+---
 
 ## Overview
-QJL (Quantized Johnson-Lindenstrauss) is a novel approach to compress the Key-Value (KV) cache in large language models (LLMs). It applies a Johnson-Lindenstrauss (JL) transform as a preconditioner to the embedding vectors in the cache, then quantizes the transformed vectors to a single sign bit, resulting in a 1-bit representation of the embedding vectors. Preconditioning with the JL transform enables QJL to quantize vectors in the cache to a single bit without needing to normalize the embedding vectors, while providing an unbiased estimator for inner products with minimal distortion. This eliminates memory overheads associated with storing quantization constants, which is common in previous methods.
+
+This repository extends **QJL** (Quantized Johnson-Lindenstrauss) with **Adaptive QJL (A-QJL)** — a layer-wise allocation of compression strength to improve the quality–memory trade-off at a fixed memory budget.
+
+### Base QJL
+QJL applies a Johnson-Lindenstrauss (JL) transform to key embeddings, then quantizes to 1-bit (sign). It uses an asymmetric inner-product estimator for attention scores and avoids per-block quantization constants (“zero-overhead”). This significantly reduces KV cache memory during long-context inference.
 
 
 ![LLM Decoding](./img/fig_llm_decoding.png)
@@ -17,11 +25,23 @@ The functional block diagram of QJL is shown below.
 Experimental results demonstrate QJL's effectiveness across various LLMs, including Llama-2 and Llama-3, on multiple NLP tasks. QJL achieves a significant reduction in KV cache memory usage (3 bits per float vs. 16 bits) while maintaining or slightly improving accuracy compared to baselines and other quantization methods. It also shows faster runtime, especially for long sequences, and supports different precision formats and grouped query attention, making it compatible with newer LLM architectures. Overall, QJL offers a memory-efficient, fast, and accurate solution for KV cache quantization, addressing a significant bottleneck in serving LLMs, particularly for long-context applications.
 
 
+## A-QJL Method (Our Extension)
+
+**Idea:** Instead of one fixed projection dimension for all layers, A-QJL allocates different projection dimensions (`key_quantization_bits`, `key_quantization_bits_initial_layers`) by layer groups.
+
+- **Early layers** get higher dimension (less compression) where distortion hurts more.
+- **Later layers** get lower dimension (more compression) where the model is more robust.
+- A **calibration step** selects the allocation under a fixed memory budget using a small held-out set.
+
+**Files:** `scripts/aqjl_experiments.py`, `config/aqjl_experiments.json`, `scripts/plot_aqjl_results.py`
+
+---
+
 ## Installation
 1. Clone the repository:
     ```sh
-    git clone git@github.com:amirzandieh/QJL.git
-    cd QJL
+    git clone https://github.com/Chirumamilla1522/AQJl-Memory-Efficient-Long-Context-LLM-Inference-via-QJL-and-Adaptive-Layer-Wise-Compression.git
+    cd AQJl-Memory-Efficient-Long-Context-LLM-Inference-via-QJL-and-Adaptive-Layer-Wise-Compression
     ```
 
 2. Install the required packages:
@@ -39,7 +59,7 @@ Experimental results demonstrate QJL's effectiveness across various LLMs, includ
 
 QJL supports Llama 2/3 family models (e.g., ``longchat-7b-v1.5-32k``). To evaluate QJL on LongBench, use the following example :
 ```sh
-python longbench.py --model_name "lmsys/longchat-7b-v1.5-32k" \
+python run_longbench.py --model_name "lmsys/longchat-7b-v1.5-32k" \
     --dtype "float16" \
     --key_quantization_bits 256 \
     --key_quantization_bits_initial_layers 512 \
@@ -83,7 +103,7 @@ This produces per-run JSON files in `results/runs/` and an aggregate CSV:
 
 ### 3) Plot and summarize
 ```sh
-python scripts/plot_aqjl_results.py --input_csv results/aqjl_results.csv
+python scripts/plot_aqjl_results.py --input_csv results/aqjl_results.csv --out_dir results/plots
 ```
 
 This creates:
