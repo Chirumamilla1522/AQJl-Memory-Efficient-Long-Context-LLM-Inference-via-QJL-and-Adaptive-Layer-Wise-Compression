@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# QJL kernel build
+qjl_kernel/*.so
+qjl_kernel/*.pyd
+qjl_kernel/build/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Hugging Face cache (large)
+.cache/
+
+# Optional: large model caches
+# *.bin
+# *.safetensors

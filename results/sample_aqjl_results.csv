@@ -1,0 +1,5 @@
+method,dataset_name,avg_score,peak_memory_gb,total_eval_time_sec,tokens_per_sec_estimate,n_data,key_quantization_bits,key_quantization_bits_initial_layers,initial_layers_count
+qjl_fixed,qasper,41.2000,13.4000,920.0000,0.0652,60,256,512,15
+aqjl,qasper,42.0500,13.3500,928.0000,0.0647,60,224,576,15
+qjl_fixed,hotpotqa,39.8000,13.2500,901.0000,0.0666,60,256,512,15
+aqjl,hotpotqa,40.4000,13.1800,910.0000,0.0659,60,224,576,15

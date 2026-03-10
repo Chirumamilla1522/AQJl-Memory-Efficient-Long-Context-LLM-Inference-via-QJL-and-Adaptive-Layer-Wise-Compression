@@ -1,0 +1,70 @@
+{
+  "global": {
+    "model_name": "lmsys/longchat-7b-v1.5-32k",
+    "dtype": "float16",
+    "seed": 42,
+    "config_dir": "config",
+    "datasets": ["qasper", "hotpotqa"],
+    "n_data": 60
+  },
+  "fixed_qjl": {
+    "key_quantization_bits": 256,
+    "key_quantization_bits_initial_layers": 512,
+    "initial_layers_count": 15,
+    "outlier_count_general": 8,
+    "outlier_count_initial_layers": 8,
+    "value_quantization_bits": 2,
+    "group_size": 32,
+    "buffer_size": 128
+  },
+  "adaptive_qjl": {
+    "enabled": true,
+    "selected": {
+      "key_quantization_bits": 224,
+      "key_quantization_bits_initial_layers": 576,
+      "initial_layers_count": 15,
+      "outlier_count_general": 8,
+      "outlier_count_initial_layers": 8,
+      "value_quantization_bits": 2,
+      "group_size": 32,
+      "buffer_size": 128
+    },
+    "calibration": {
+      "dataset_name": "qasper",
+      "n_data": 20,
+      "memory_budget_gb": 14.0
+    },
+    "candidates": [
+      {
+        "key_quantization_bits": 192,
+        "key_quantization_bits_initial_layers": 640,
+        "initial_layers_count": 15,
+        "outlier_count_general": 8,
+        "outlier_count_initial_layers": 8,
+        "value_quantization_bits": 2,
+        "group_size": 32,
+        "buffer_size": 128
+      },
+      {
+        "key_quantization_bits": 224,
+        "key_quantization_bits_initial_layers": 576,
+        "initial_layers_count": 15,
+        "outlier_count_general": 8,
+        "outlier_count_initial_layers": 8,
+        "value_quantization_bits": 2,
+        "group_size": 32,
+        "buffer_size": 128
+      },
+      {
+        "key_quantization_bits": 256,
+        "key_quantization_bits_initial_layers": 512,
+        "initial_layers_count": 15,
+        "outlier_count_general": 8,
+        "outlier_count_initial_layers": 8,
+        "value_quantization_bits": 2,
+        "group_size": 32,
+        "buffer_size": 128
+      }
+    ]
+  }
+}
