@@ -76,22 +76,33 @@ class LlamaAttention_QJL(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
 
-        self.initial_layers_count = config.initial_layers_count
+        self.initial_layers_count = getattr(config, "initial_layers_count", 15)
 
-        self.qjl = config.qjl
-        self.key_quantization_bits = config.key_quantization_bits
-
-        self.qjl_initial_layers = config.qjl_initial_layers
-        self.key_quantization_bits_initial_layers = config.key_quantization_bits_initial_layers
-
-        self.outlier_count_initial_layers = config.outlier_count_initial_layers
-        self.outlier_count_general = config.outlier_count_general
+        # A-QJL: 3+ layer groups with per-group projection dimensions
+        self.use_multi_group = hasattr(config, "layer_group_boundaries") and config.layer_group_boundaries is not None
+        if self.use_multi_group:
+            self.layer_group_boundaries = config.layer_group_boundaries  # e.g. [8, 16, 24] -> groups [0,8), [8,16), [16,24), [24,N)
+            self.qjl_groups = config.qjl_groups  # list of (qjl_sketch, outlier_count, k) per group
+        else:
+            self.qjl = config.qjl
+            self.key_quantization_bits = config.key_quantization_bits
+            self.qjl_initial_layers = config.qjl_initial_layers
+            self.key_quantization_bits_initial_layers = config.key_quantization_bits_initial_layers
+            self.outlier_count_initial_layers = config.outlier_count_initial_layers
+            self.outlier_count_general = config.outlier_count_general
 
         self.value_quantization_bits = config.value_quantization_bits
         self.group_size = config.group_size
         self.buffer_size = config.buffer_size
 
         self._init_rope()
+
+    def _get_group_for_layer(self, layer_idx: int) -> int:
+        """Return group index for a layer. Used in A-QJL multi-group mode."""
+        for g, end in enumerate(self.layer_group_boundaries):
+            if layer_idx < end:
+                return g
+        return len(self.layer_group_boundaries)
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -264,11 +275,16 @@ class LlamaAttention_QJL(nn.Module):
                 query_states.transpose(1, 2), key_states.transpose(1, 2),
                 value_states.transpose(1, 2), None, q_len, dropout=0.0, is_causal=self.is_causal,
             )
-            kv_quant = QJLKeyQuantizer(self.qjl, self.outlier_count_general, self.buffer_size, self.group_size,
-                                       self.key_quantization_bits)
-            if idx < self.initial_layers_count:
-                kv_quant = QJLKeyQuantizer(self.qjl_initial_layers, self.outlier_count_initial_layers, self.buffer_size,
-                                           self.group_size, self.key_quantization_bits_initial_layers)
+            if self.use_multi_group:
+                g = self._get_group_for_layer(idx)
+                qjl_sketch, outlier_cnt, k_bits = self.qjl_groups[g]
+                kv_quant = QJLKeyQuantizer(qjl_sketch, outlier_cnt, self.buffer_size, self.group_size, k_bits)
+            else:
+                kv_quant = QJLKeyQuantizer(self.qjl, self.outlier_count_general, self.buffer_size, self.group_size,
+                                           self.key_quantization_bits)
+                if idx < self.initial_layers_count:
+                    kv_quant = QJLKeyQuantizer(self.qjl_initial_layers, self.outlier_count_initial_layers, self.buffer_size,
+                                               self.group_size, self.key_quantization_bits_initial_layers)
 
             kv_quant.build_sketch(key_states)
 

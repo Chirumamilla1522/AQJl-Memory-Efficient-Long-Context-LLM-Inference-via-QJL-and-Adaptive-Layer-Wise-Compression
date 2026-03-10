@@ -1,0 +1,55 @@
+{
+  "global": {
+    "model_name": "lmsys/longchat-7b-v1.5-32k",
+    "dtype": "float16",
+    "seed": 42,
+    "config_dir": "config",
+    "datasets": ["qasper", "hotpotqa"],
+    "n_data": 60
+  },
+  "fixed_qjl": {
+    "key_quantization_bits": 256,
+    "key_quantization_bits_initial_layers": 512,
+    "initial_layers_count": 15,
+    "outlier_count_general": 8,
+    "outlier_count_initial_layers": 8,
+    "value_quantization_bits": 2,
+    "group_size": 32,
+    "buffer_size": 128
+  },
+  "adaptive_qjl": {
+    "enabled": true,
+    "use_multi_group": true,
+    "selected": {
+      "layer_group_boundaries": [8, 16, 24],
+      "key_quantization_bits_per_group": [512, 384, 256, 192],
+      "outlier_count_per_group": [8, 8, 8, 8],
+      "value_quantization_bits": 2,
+      "group_size": 32,
+      "buffer_size": 128
+    },
+    "calibration": {
+      "run_profiler_first": false,
+      "profiler_output": "config/aqjl_profiled.json",
+      "dataset_name": "qasper",
+      "n_data": 20,
+      "memory_budget_gb": 14.0
+    },
+    "candidates": [
+      {
+        "layer_group_boundaries": [8, 16, 24],
+        "key_quantization_bits_per_group": [448, 352, 256, 160],
+        "value_quantization_bits": 2,
+        "group_size": 32,
+        "buffer_size": 128
+      },
+      {
+        "layer_group_boundaries": [8, 16, 24],
+        "key_quantization_bits_per_group": [512, 384, 256, 192],
+        "value_quantization_bits": 2,
+        "group_size": 32,
+        "buffer_size": 128
+      }
+    ]
+  }
+}

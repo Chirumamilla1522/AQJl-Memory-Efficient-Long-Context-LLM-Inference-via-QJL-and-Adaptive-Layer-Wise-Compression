@@ -27,13 +27,23 @@ Experimental results demonstrate QJL's effectiveness across various LLMs, includ
 
 ## A-QJL Method (Our Extension)
 
-**Idea:** Instead of one fixed projection dimension for all layers, A-QJL allocates different projection dimensions (`key_quantization_bits`, `key_quantization_bits_initial_layers`) by layer groups.
+**Idea:** Instead of one fixed projection dimension for all layers, A-QJL divides layers into **3+ groups** and assigns each group a different projection dimension (`k`). Early layers get higher `k` (less compression); later layers get lower `k` (more compression) under a fixed memory budget.
 
-- **Early layers** get higher dimension (less compression) where distortion hurts more.
-- **Later layers** get lower dimension (more compression) where the model is more robust.
-- A **calibration step** selects the allocation under a fixed memory budget using a small held-out set.
+### Group size and k allocation
+1. **Layer groups:** Define boundaries, e.g. `[8, 16, 24]` for 32 layers → groups 0–7, 8–15, 16–23, 24–31.
+2. **k per group:** Either (a) hand-tune, or (b) use the **sensitivity profiler** to estimate per-layer key variance and allocate `k` proportionally.
 
-**Files:** `scripts/aqjl_experiments.py`, `config/aqjl_experiments.json`, `scripts/plot_aqjl_results.py`
+### Sensitivity profiler (principled allocation)
+```sh
+python scripts/sensitivity_profiler.py --model_name "lmsys/longchat-7b-v1.5-32k" \
+  --dataset_name qasper --n_calib 10 --num_groups 4 --output config/aqjl_profiled.json
+```
+This outputs `layer_group_boundaries` and `key_quantization_bits_per_group` for `run_longbench.py`.
+
+### Files
+- `scripts/aqjl_experiments.py` — experiment driver (fixed QJL vs A-QJL)
+- `scripts/sensitivity_profiler.py` — per-layer sensitivity profiling
+- `config/aqjl_experiments_3groups.json` — 3+ group config
 
 ---
 
@@ -57,7 +67,9 @@ Experimental results demonstrate QJL's effectiveness across various LLMs, includ
 
 ## Evaluate QJL on LongBench
 
-QJL supports Llama 2/3 family models (e.g., ``longchat-7b-v1.5-32k``). To evaluate QJL on LongBench, use the following example :
+QJL supports Llama 2/3 family models (e.g., ``longchat-7b-v1.5-32k``). To evaluate QJL on LongBench:
+
+**2-group mode (fixed QJL):**
 ```sh
 python run_longbench.py --model_name "lmsys/longchat-7b-v1.5-32k" \
     --dtype "float16" \
@@ -74,6 +86,14 @@ python run_longbench.py --model_name "lmsys/longchat-7b-v1.5-32k" \
     --n_data 150
 ```
 
+**A-QJL 3+ group mode:**
+```sh
+python run_longbench.py --model_name "lmsys/longchat-7b-v1.5-32k" \
+    --dataset_name qasper --n_data 60 \
+    --layer_group_boundaries "8,16,24" \
+    --key_quantization_bits_per_group "512,384,256,192"
+```
+
 ### Runtime Evaluation
 To produce the runtime experiments from the paper and plot the runtime, sinly run the following command:
 ```sh
@@ -84,14 +104,20 @@ python plot_runtime.py
 
 ## A-QJL Experiments (Layer-Group Adaptive QJL)
 
-This repository now includes a reproducible experiment driver to compare:
+This repository includes a reproducible experiment driver to compare:
 
-- `qjl_fixed`: fixed QJL settings for all non-initial layers
-- `aqjl`: layer-group adaptive QJL (different projection dimensions for initial vs later layers)
+- `qjl_fixed`: fixed QJL (2 groups: initial vs rest)
+- `aqjl`: adaptive QJL with 3+ layer groups and per-group `k`
 
 ### 1) Configure experiment
-Edit:
-`config/aqjl_experiments.json`
+- **2-group mode:** `config/aqjl_experiments.json`
+- **3+ group mode:** `config/aqjl_experiments_3groups.json`
+
+### 1b) Optional: run sensitivity profiler first
+```sh
+python scripts/sensitivity_profiler.py --output config/aqjl_profiled.json
+```
+Then set `"run_profiler_first": true` in the config calibration section.
 
 ### 2) Run experiments
 ```sh

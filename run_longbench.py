@@ -48,6 +48,9 @@ def setup_model_and_tokenizer(
         value_quantization_bits=2,
         group_size=32,
         buffer_size=128,
+        layer_group_boundaries=None,
+        key_quantization_bits_per_group=None,
+        outlier_count_per_group=None,
 ):
     device = 'cuda'
     config = LlamaConfig.from_pretrained(model_name)
@@ -74,10 +77,28 @@ def setup_model_and_tokenizer(
 
     generator = torch.Generator(device=torch.device(device))
 
-    config.qjl = QJLSketch(dim=(128, config.key_quantization_bits), dim_outlier=256, rot=True, rng=generator)
-    config.qjl_initial_layers = QJLSketch(dim=(128, config.key_quantization_bits_initial_layers), dim_outlier=128,
-                                              rot=True,
-                                              rng=generator)
+    # A-QJL: 3+ layer groups
+    if layer_group_boundaries is not None and key_quantization_bits_per_group is not None:
+        num_layers = config.num_hidden_layers
+        assert len(layer_group_boundaries) + 1 == len(key_quantization_bits_per_group), \
+            f"layer_group_boundaries ({len(layer_group_boundaries)}) + 1 must equal len(key_quantization_bits_per_group) ({len(key_quantization_bits_per_group)})"
+        oc_per_group = outlier_count_per_group if outlier_count_per_group else [8] * len(key_quantization_bits_per_group)
+        config.layer_group_boundaries = layer_group_boundaries
+        config.qjl_groups = []
+        for g, k in enumerate(key_quantization_bits_per_group):
+            oc = oc_per_group[g] if g < len(oc_per_group) else 8
+            dim_outlier = 256 if k >= 256 else 128
+            qjl = QJLSketch(dim=(128, k), dim_outlier=dim_outlier, rot=True, rng=generator)
+            config.qjl_groups.append((qjl, oc, k))
+        config.qjl = None  # unused in multi-group
+        config.qjl_initial_layers = None
+    else:
+        config.layer_group_boundaries = None
+        config.qjl_groups = None
+        config.qjl = QJLSketch(dim=(128, config.key_quantization_bits), dim_outlier=256, rot=True, rng=generator)
+        config.qjl_initial_layers = QJLSketch(dim=(128, config.key_quantization_bits_initial_layers), dim_outlier=128,
+                                                  rot=True,
+                                                  rng=generator)
 
     config.use_flash = True
 
@@ -105,6 +126,12 @@ def parse_args(args=None):
     parser.add_argument('--value_quantization_bits', type=int, default=2)
     parser.add_argument('--group_size', type=int, default=32)
     parser.add_argument('--buffer_size', type=int, default=128)
+    parser.add_argument('--layer_group_boundaries', type=str, default=None,
+                        help="A-QJL 3+ groups: comma-separated boundaries, e.g. '8,16,24' for 4 groups.")
+    parser.add_argument('--key_quantization_bits_per_group', type=str, default=None,
+                        help="A-QJL: comma-separated k per group, e.g. '512,384,256,192'.")
+    parser.add_argument('--outlier_count_per_group', type=str, default=None,
+                        help="A-QJL: comma-separated outlier counts per group (optional).")
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--dataset_name', type=str, required=True)
     parser.add_argument('--n_data', type=int, default=150)
@@ -205,10 +232,21 @@ def evaluate_model(
     }
 
 
+def _parse_int_list(s, default=None):
+    if s is None:
+        return default
+    return [int(x.strip()) for x in s.split(",") if x.strip()]
+
+
 def main(args):
     seed_everything(args.seed)
     dataset2maxlen, dataset2prompt, model2maxlen,  = load_configurations(args.config_dir)
     dtype = torch.float16 if args.dtype == "float16" else torch.float32
+
+    layer_bounds = _parse_int_list(args.layer_group_boundaries)
+    k_per_group = _parse_int_list(args.key_quantization_bits_per_group)
+    oc_per_group = _parse_int_list(args.outlier_count_per_group)
+
     model_qjl, tokenizer = setup_model_and_tokenizer(
         args.model_name,
         dtype,
@@ -220,6 +258,9 @@ def main(args):
         args.value_quantization_bits,
         args.group_size,
         args.buffer_size,
+        layer_group_boundaries=layer_bounds,
+        key_quantization_bits_per_group=k_per_group,
+        outlier_count_per_group=oc_per_group,
     )
     print(f"Model and tokenizer for {args.model_name} are set up successfully.")
     metrics = evaluate_model(
