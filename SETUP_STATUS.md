@@ -1,10 +1,10 @@
 # Setup / Current Status
 
-## What I finished on my side
+## Current setup progress
 
-I was able to get the basic environment working in WSL.
+We were able to get the basic environment working in WSL.
 
-Finished so far:
+Completed so far:
 - Installed WSL Ubuntu
 - Confirmed GPU is visible in WSL
 - Installed PyTorch with CUDA support
@@ -27,7 +27,7 @@ These parts were confirmed:
 
 ## Current experiment direction
 
-The current plan is still:
+Our current plan is still:
 - replicate the existing results
 - compare fixed QJL vs A-QJL
 - try adaptive dimensions for different layer groups
