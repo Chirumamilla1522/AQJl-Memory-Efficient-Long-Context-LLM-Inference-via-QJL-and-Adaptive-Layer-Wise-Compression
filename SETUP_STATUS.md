@@ -2,7 +2,7 @@
 
 ## Current setup progress
 
-We were able to get the basic environment working in WSL.
+We were able to get most of the base environment working in WSL.
 
 Completed so far:
 - Installed WSL Ubuntu
