@@ -1,0 +1,7 @@
+# Apple Silicon (macOS): pip install -r requirements-mlx.txt
+# Used by scripts/sensitivity_profiler.py --backend mlx
+mlx>=0.21.0
+mlx-lm>=0.21.0
+numpy>=1.26.0
+datasets>=2.16.0
+sentencepiece>=0.2.0

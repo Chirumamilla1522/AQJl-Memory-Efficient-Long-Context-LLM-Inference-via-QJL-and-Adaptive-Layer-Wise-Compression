@@ -10,6 +10,7 @@ from transformers import LlamaConfig, AutoTokenizer
 from datasets import load_dataset
 from eval_long_bench import dataset2metric
 from fastchat.model import get_conversation_template
+from models.aqjl_budget import snap_sketch_widths_inplace, surrogate_budget, validate_aqjl_config
 from models.llama2_utils_qjl import QJLSketch
 from models.llama2_qjl import LlamaForCausalLM_QJL
 
@@ -82,6 +83,13 @@ def setup_model_and_tokenizer(
         num_layers = config.num_hidden_layers
         assert len(layer_group_boundaries) + 1 == len(key_quantization_bits_per_group), \
             f"layer_group_boundaries ({len(layer_group_boundaries)}) + 1 must equal len(key_quantization_bits_per_group) ({len(key_quantization_bits_per_group)})"
+        key_quantization_bits_per_group = snap_sketch_widths_inplace(
+            [int(x) for x in key_quantization_bits_per_group],
+            multiple=64,
+            m_min=64,
+            m_max=2048,
+        )
+        validate_aqjl_config(num_layers, layer_group_boundaries, key_quantization_bits_per_group)
         oc_per_group = outlier_count_per_group if outlier_count_per_group else [8] * len(key_quantization_bits_per_group)
         config.layer_group_boundaries = layer_group_boundaries
         config.qjl_groups = []
@@ -272,6 +280,16 @@ def main(args):
         model2maxlen,
         args.n_data,
     )
+    metrics["seed"] = args.seed
+    metrics["model_name"] = args.model_name
+    cfg = model_qjl.config
+    if getattr(cfg, "layer_group_boundaries", None) is not None and getattr(cfg, "qjl_groups", None):
+        bounds = list(cfg.layer_group_boundaries)
+        k_groups = [int(t[2]) for t in cfg.qjl_groups]
+        nl = int(cfg.num_hidden_layers)
+        metrics["layer_group_boundaries"] = bounds
+        metrics["key_quantization_bits_per_group"] = k_groups
+        metrics["surrogate_B"] = surrogate_budget(bounds, k_groups, nl)
     print("RUN_METRICS_JSON::" + json.dumps(metrics))
     if args.output_json:
         with open(args.output_json, "w", encoding="utf-8") as f:
